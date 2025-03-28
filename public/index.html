@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Dynamic Compression Ratio Calculator</title>
+
+        <!-- 98.css from requested CDN link -->
+        <link
+            rel="stylesheet"
+            href="/98.css"
+        />
+
+        <style>
+            /* Title at 2em size, Windows 98–like font */
+            h1 {
+                font-size: 2em;
+                font-family: Tahoma, sans-serif; /* typical Win98 style */
+                text-align: center;
+            }
+
+			details {
+				color: #fefefe;
+			}
+
+            /* Container styling */
+            body {
+                background-color: #008080;
+                margin: 20px;
+                font-family: Tahoma, sans-serif; /* for overall Windows 98 vibe */
+            }
+
+            .container {
+                max-width: 700px;
+                margin: auto;
+            }
+
+            /* Increase form fields by ~30% */
+            input[type="number"],
+            input[type="text"],
+            button {
+                font-size: 110%;
+                font-weight: bold;
+            }
+
+            /* Basic field layout */
+            .field {
+                margin-bottom: 8px;
+            }
+            label {
+                display: inline-block;
+                width: 180px;
+            }
+
+            /* Window layout: place inputs on left, result on the right */
+            .window-body {
+                display: flex;
+                gap: 20px;
+            }
+            .left-panel {
+                flex: 1;
+            }
+            .right-panel {
+                flex: 1;
+                text-align: center; /* Center the content in the right panel */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            #result {
+                white-space: pre-wrap; /* preserve line breaks */
+                text-align: center; /* additional safety for text centering */
+                font-weight: normal; /* normal by default so only what we <strong> is bold */
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Dynamic Compression Ratio Calculator</h1>
+
+            <div class="window">
+                <div class="title-bar">
+                    <div class="title-bar-text">DCR Calculator</div>
+                    <div class="title-bar-controls">
+                        <button aria-label="Close"></button>
+                    </div>
+                </div>
+
+                <div class="window-body">
+                    <!-- Left panel: inputs & button -->
+                    <div class="left-panel">
+                        <!-- Radio Buttons to Choose Calculation Method -->
+                        <div class="field">
+                            <label>Calculation Method:</label>
+                            <input
+                                type="radio"
+                                name="calcMethod"
+                                value="duration"
+                                checked
+                                onclick="toggleMethod()"
+                                id="methodDuration"
+                            />
+                            <label for="methodDuration"
+                                >Use 0.050" Duration</label
+                            >
+
+                            <input
+                                type="radio"
+                                name="calcMethod"
+                                value="tdcLift"
+                                onclick="toggleMethod()"
+                                id="methodTdcLift"
+                            />
+                            <label for="methodTdcLift"
+                                >Use Valve Lift at TDC</label
+                            >
+                        </div>
+
+                        <!-- Common Fields -->
+                        <div class="field">
+                            <label for="bore">Bore (mm):</label>
+                            <input
+                                type="number"
+                                id="bore"
+                                value="98"
+                                step="0.1"
+                            />
+                        </div>
+                        <div class="field">
+                            <label for="stroke">Stroke (mm):</label>
+                            <input
+                                type="number"
+                                id="stroke"
+                                value="70.4"
+                                step="0.1"
+                            />
+                        </div>
+                        <div class="field">
+                            <label for="scr">Static Comp. Ratio:</label>
+                            <input
+                                type="number"
+                                id="scr"
+                                value="10.2"
+                                step="0.1"
+                            />
+                        </div>
+                        <div class="field">
+                            <label for="lsa">Lobe Separation (°):</label>
+                            <input
+                                type="number"
+                                id="lsa"
+                                value="114"
+                                step="1"
+                            />
+                        </div>
+
+                        <!-- Duration @ 0.050" Fields -->
+                        <div id="durationFields">
+                            <div class="field">
+                                <label for="duration050"
+                                    >Intake Dur @ 0.050" (°):</label
+                                >
+                                <input
+                                    type="number"
+                                    id="duration050"
+                                    value="242"
+                                    step="1"
+                                />
+                            </div>
+                            <div class="field">
+                                <label for="camAdvance">Cam Advance (°):</label>
+                                <input
+                                    type="number"
+                                    id="camAdvance"
+                                    value="0"
+                                    step="1"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Valve Lift at TDC Fields -->
+                        <div
+                            id="tdcLiftFields"
+                            class="field"
+                            style="display: none"
+                        >
+                            <label for="tdcLift">Valve Lift at TDC (mm):</label>
+                            <input
+                                type="number"
+                                id="tdcLift"
+                                value="1.70"
+                                step="0.01"
+                            />
+                            <p style="font-size: 85%">
+                                <em
+                                    >Assumes baseline ~242°@0.050", 114° LSA,
+                                    ~1.2 mm TDC lift straight up.<br />
+                                    Roughly 0.1 mm TDC lift ≈ 1° centerline
+                                    shift.</em
+                                >
+                            </p>
+                        </div>
+
+                        <!-- Calculate Button -->
+                        <button onclick="calculateDCR()">Calculate DCR</button>
+                    </div>
+
+                    <!-- Right panel: result -->
+                    <div class="right-panel">
+                        <div id="result" class="alert alert-info">
+                            <!-- Calculation results displayed here -->
+                        </div>
+                    </div>
+                </div>
+                <!-- window-body -->
+            </div>
+            <!-- window -->
+            <div
+                class="details"
+                style="width: 300px; margin: 0 auto; text-align: center"
+            >
+                <p>
+                    Dynamic Compression Ratio (DCR) is the effective compression
+                    the engine achieves once the intake valve closes, rather
+                    than from the piston's absolute bottom-dead-center. It's a
+                    more realistic indicator of cylinder pressure than static
+                    compression alone, especially when factoring in cam timing.
+                </p>
+
+                <p>
+                    This calculator uses the engine's bore, stroke, compression
+                    ratio, and cam profile data (duration or valve lift at TDC)
+                    to estimate the DCR, helping you understand how changes in
+                    valve events influence combustion characteristics.
+                </p>
+            </div>
+            <!-- details  --
+        </div>
+        <!-- container -->
+
+        <script>
+            function toggleMethod() {
+                const method = document.querySelector(
+                    'input[name="calcMethod"]:checked',
+                ).value;
+                const durationFields =
+                    document.getElementById("durationFields");
+                const tdcLiftFields = document.getElementById("tdcLiftFields");
+
+                if (method === "duration") {
+                    durationFields.style.display = "";
+                    tdcLiftFields.style.display = "none";
+                } else {
+                    durationFields.style.display = "none";
+                    tdcLiftFields.style.display = "";
+                }
+            }
+
+            function calculateDCR() {
+                // Common inputs
+                const boreMM = parseFloat(
+                    document.getElementById("bore").value,
+                );
+                const strokeMM = parseFloat(
+                    document.getElementById("stroke").value,
+                );
+                const scr = parseFloat(document.getElementById("scr").value);
+                const lsa = parseFloat(document.getElementById("lsa").value);
+
+                if (
+                    isNaN(boreMM) ||
+                    isNaN(strokeMM) ||
+                    isNaN(scr) ||
+                    isNaN(lsa)
+                ) {
+                    document.getElementById("result").innerText =
+                        "Please enter valid numeric inputs (bore, stroke, SCR, LSA).";
+                    return;
+                }
+
+                // Swept volume (cc): π*(bore/2)^2 * stroke / 1000
+                const sweptVolume =
+                    (Math.PI * Math.pow(boreMM / 2, 2) * strokeMM) / 1000;
+
+                // Clearance volume from SCR: Vc = Vs / (SCR - 1)
+                const clearanceVol = sweptVolume / (scr - 1);
+
+                // Determine which method is selected
+                const method = document.querySelector(
+                    'input[name="calcMethod"]:checked',
+                ).value;
+                let intakeCloseDeg = 0; // from TDC
+                let closeABDC = 0; // after BDC
+
+                if (method === "duration") {
+                    // 0.050" Duration method
+                    const dur050 = parseFloat(
+                        document.getElementById("duration050").value,
+                    );
+                    const camAdvDeg = parseFloat(
+                        document.getElementById("camAdvance").value,
+                    );
+
+                    if (isNaN(dur050) || isNaN(camAdvDeg)) {
+                        document.getElementById("result").innerText =
+                            "Please enter valid numeric inputs for duration & cam advance.";
+                        return;
+                    }
+
+                    // intake centerline = LSA - advance
+                    const icl = lsa - camAdvDeg;
+                    // half the 0.050" duration
+                    const halfDur = dur050 / 2;
+                    // intake closes (from TDC)
+                    intakeCloseDeg = icl + halfDur;
+                    // close ABDC
+                    closeABDC = intakeCloseDeg - 180;
+                } else {
+                    // Valve Lift at TDC method
+                    const tdcLiftVal = parseFloat(
+                        document.getElementById("tdcLift").value,
+                    );
+
+                    if (isNaN(tdcLiftVal)) {
+                        document.getElementById("result").innerText =
+                            "Please enter a valid numeric input for valve lift at TDC.";
+                        return;
+                    }
+
+                    // Baseline ~1.2 mm TDC lift when "straight up"
+                    // Approx rule: 0.1 mm => 1° shift
+                    const baseTdcLift = 1.2;
+                    const shiftPerMm = 10.0;
+                    const mmShift = tdcLiftVal - baseTdcLift;
+                    // degrees shift in centerline
+                    const degShift = mmShift * shiftPerMm;
+                    // new intake centerline
+                    const icl = lsa - degShift;
+
+                    // We'll assume a ~242° total at 0.050" for the lobe
+                    const halfDur = 242 / 2; // 121
+                    intakeCloseDeg = icl + halfDur;
+                    closeABDC = intakeCloseDeg - 180;
+                }
+
+                // Effective stroke fraction
+                const effectiveStrokeDeg = 180 - closeABDC;
+                let strokeFraction = effectiveStrokeDeg / 180;
+                if (strokeFraction < 0) strokeFraction = 0;
+                if (strokeFraction > 1) strokeFraction = 1;
+
+                // Effective swept volume
+                const effSv = sweptVolume * strokeFraction;
+
+                // DCR
+                const dcr = (effSv + clearanceVol) / clearanceVol;
+
+                // Build output with <strong> around “Dynamic Compression Ratio”
+                let output = "";
+                output += `Intake Close (from TDC): ${intakeCloseDeg.toFixed(1)}°\n`;
+                output += `Close ABDC: ${closeABDC.toFixed(1)}°\n`;
+                output += `Effective Stroke: ${(strokeFraction * 100).toFixed(1)}% of full\n\n`;
+                output += `<strong>Dynamic Compression Ratio</strong>: ${dcr.toFixed(2)}:1`;
+
+                // Insert as HTML (so the <strong> tag works)
+                document.getElementById("result").innerHTML = output;
+            }
+        </script>
+    </body>
+</html>
