@@ -165,11 +165,11 @@ export function DCRCalculator() {
   return (
     <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
-        <CardDescription class="text-xs text-center">
+        <CardDescription className="text-xs text-center">
           Calculates approximate Dynamic Compression Ratio (DCR) based on valve
           timing (LSA, Duration @ 0.050").
         </CardDescription>
-        <CardDescription class="text-xs text-center">Providing Advertised Duration
+        <CardDescription className="text-xs text-center">Providing Advertised Duration
           improves accuracy over default ramp estimation. Rod length is
           estimated if not provided.
         </CardDescription>
