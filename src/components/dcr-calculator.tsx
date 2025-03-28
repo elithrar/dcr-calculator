@@ -165,9 +165,11 @@ export function DCRCalculator() {
   return (
     <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
-        <CardDescription>
+        <CardDescription class="text-xs text-center">
           Calculates approximate Dynamic Compression Ratio (DCR) based on valve
-          timing (LSA, Duration @ 0.050"). Providing Advertised Duration
+          timing (LSA, Duration @ 0.050").
+        </CardDescription>
+        <CardDescription class="text-xs text-center">Providing Advertised Duration
           improves accuracy over default ramp estimation. Rod length is
           estimated if not provided.
         </CardDescription>
@@ -239,10 +241,10 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Rod Length (mm, optional)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        placeholder="Estimated if blank" 
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="Estimated if blank"
                         className="max-w-[150px]"
                         value={value === null ? "" : value}
                         onChange={e => {
@@ -265,9 +267,9 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Advertised Duration (deg, optional)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="Seat-to-seat" 
+                      <Input
+                        type="number"
+                        placeholder="Seat-to-seat"
                         className="max-w-[150px]"
                         value={value === null ? "" : value}
                         onChange={e => {
