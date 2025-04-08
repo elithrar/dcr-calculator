@@ -6,7 +6,7 @@ Live and online: https://dcr.questionable.services/
 
 ### Deploy it
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=<your git repo URL>)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/elithrar/dcr-calculator/)
 
 ### License
 
