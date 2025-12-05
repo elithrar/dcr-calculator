@@ -6,7 +6,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dcr-calculator",
   "main": "api/index.ts",
-  "compatibility_date": "2025-03-27",
+  "compatibility_date": "2025-12-05",
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
