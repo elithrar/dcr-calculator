@@ -46,6 +46,11 @@ const calculatorFormSchema = z.object({
     .optional()
     .nullable()
     .default(null), // Optional seat-to-seat duration
+  camAdvance: z.coerce
+    .number()
+    .optional()
+    .nullable()
+    .default(null), // Cam advance in degrees (positive = advanced, negative = retarded)
 });
 
 type CalculatorFormValues = z.infer<typeof calculatorFormSchema>;
@@ -58,6 +63,7 @@ const defaultValues: CalculatorFormValues = {
   lsa: 114,
   rodLength: null,
   advertisedIntakeDuration: null, // Seat-to-seat duration
+  camAdvance: null, // Cam advance in degrees
 };
 
 // DCR calculation function
@@ -68,10 +74,14 @@ function calculateDCR(
   lsa: number,
   rodLengthMM: number | null | undefined,
   advertisedIntakeDuration: number | null | undefined,
+  camAdvance: number | null | undefined,
 ): number {
   // Estimate rod length if not provided
   const actualRodLengthMM =
     rodLengthMM && rodLengthMM > 0 ? rodLengthMM : strokeMM * 1.7;
+
+  // Use 0 if cam advance not provided
+  const actualCamAdvance = camAdvance ?? 0;
 
   let ivcAngleABDC: number;
 
@@ -84,9 +94,10 @@ function calculateDCR(
   ) {
     rampDegrees = (advertisedIntakeDuration - intakeDurationAt050) / 2;
   } else {
-    rampDegrees = 15; // Default estimate
+    rampDegrees = 20; // Default estimate (~40° seat-to-seat difference typical for street performance cams)
   }
-  ivcAngleABDC = intakeDurationAt050 / 2 + lsa - 180 + rampDegrees;
+  // Advancing the cam (positive value) closes the intake valve earlier, reducing IVC ABDC
+  ivcAngleABDC = intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
 
   // Ensure ivcAngleABDC is within a reasonable range (e.g., > 0 and < 180)
   const clampedIvcAngleABDC = Math.max(1, Math.min(ivcAngleABDC, 179));
@@ -150,6 +161,7 @@ export function DCRCalculator() {
       data.lsa,
       data.rodLength,
       data.advertisedIntakeDuration,
+      data.camAdvance,
     );
 
     setDCRResult(dcr);
@@ -166,12 +178,8 @@ export function DCRCalculator() {
     <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
         <CardDescription className="text-xs text-center">
-          Calculates approximate Dynamic Compression Ratio (DCR) based on valve
-          timing (LSA, Duration @ 0.050").
-        </CardDescription>
-        <CardDescription className="text-xs text-center">Providing Advertised Duration
-          improves accuracy over default ramp estimation. Rod length is
-          estimated if not provided.
+          Providing Advertised Duration and Cam Advance improves accuracy.
+          Rod length is estimated if not provided.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -284,10 +292,36 @@ export function DCRCalculator() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="camAdvance"
+                render={({ field: { value, onChange, ...fieldProps } }) => (
+                  <FormItem>
+                    <FormLabel>Cam Advance (deg, optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        placeholder="0 (default)"
+                        className="max-w-[150px]"
+                        value={value === null ? "" : value}
+                        onChange={e => {
+                          const value = e.target.value === "" ? null : Number(e.target.value);
+                          onChange(value);
+                        }}
+                        {...fieldProps}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">Typically 2-4° for street cams. Positive = advanced.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="flex space-x-2">
-              <Button type="submit">Calculate</Button>
+              <Button type="submit" style={{ backgroundColor: "oklch(48.8% 0.243 264.376)" }}>Calculate</Button>
               <Button type="button" variant="outline" onClick={handleReset}>
                 Reset
               </Button>
@@ -296,12 +330,34 @@ export function DCRCalculator() {
         </Form>
 
         {dcrResult !== null && (
-          <div className="mt-6 p-4 border rounded-md bg-muted">
+          <div className="mt-6 p-4 border rounded-md bg-gray-100">
             <h3 className="text-lg font-semibold mb-2">Result:</h3>
             <p className="text-2xl font-bold">{dcrResult}:1</p>
             <p className="text-sm text-muted-foreground mt-1">{calculationDetails}</p>
           </div>
         )}
+
+        <footer className="mt-8 pt-4 border-t text-xs text-muted-foreground text-center">
+          Built by{" "}
+          <a
+            href="http://twitter.com/elithrar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            Matt Silverlock
+          </a>
+          {" | "}
+          <a
+            href="https://ratio.questionable.services/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            ratio
+          </a>
+          {" "}gearset calculator
+        </footer>
       </CardContent>
     </Card>
   );
