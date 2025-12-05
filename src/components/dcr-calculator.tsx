@@ -21,6 +21,52 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Cam presets - duration @ 0.050", LSA, advertised duration (if known), typical advance
+type CamPreset = {
+  name: string;
+  intakeDuration: number; // Duration @ 0.050"
+  lsa: number;
+  advertisedIntakeDuration?: number;
+  camAdvance?: number; // Typical installed advance (positive = advanced)
+};
+
+const camPresets: CamPreset[] = [
+  { name: "911 2.7 (stock)", intakeDuration: 218, lsa: 115, camAdvance: 0 },
+  { name: "911 SC / 3.2 (stock)", intakeDuration: 220, lsa: 115, camAdvance: 0 },
+  { name: "DC 15 (Sport SC)", intakeDuration: 228, lsa: 114, camAdvance: 4 },
+  { name: "DC 30 (Mod Solex)", intakeDuration: 236, lsa: 114, camAdvance: 4 },
+  { name: "DC 40 (Mod S)", intakeDuration: 242, lsa: 114, camAdvance: 4 },
+  { name: "DC 43-113", intakeDuration: 243, lsa: 113, camAdvance: 2 },
+  { name: "DC 60", intakeDuration: 252, lsa: 114, camAdvance: 0 },
+  { name: "DC 993SS", intakeDuration: 242, lsa: 114, camAdvance: 4 },
+  { name: "WebCam 20/21", intakeDuration: 238, lsa: 112, advertisedIntakeDuration: 258, camAdvance: 4 },
+  { name: "WebCam 993SS", intakeDuration: 240, lsa: 112, advertisedIntakeDuration: 260, camAdvance: 4 },
+];
+
+function formatPresetTooltip(preset: CamPreset): string {
+  let text = `${preset.intakeDuration}° @ 0.050" | ${preset.lsa}° LSA`;
+  if (preset.advertisedIntakeDuration) {
+    text += ` | ${preset.advertisedIntakeDuration}° adv.`;
+  }
+  if (preset.camAdvance !== undefined) {
+    text += ` | ${preset.camAdvance}° advance`;
+  }
+  return text;
+}
 
 // Form schema validation
 const calculatorFormSchema = z.object({
@@ -127,6 +173,7 @@ function calculateDCR(
 export function DCRCalculator() {
   const [dcrResult, setDCRResult] = useState<number | null>(null);
   const [calculationDetails, setCalculationDetails] = useState<string>("");
+  const [selectedPreset, setSelectedPreset] = useState<CamPreset | null>(null);
 
   const form = useForm<CalculatorFormValues>({
     resolver: zodResolver(calculatorFormSchema),
@@ -172,6 +219,26 @@ export function DCRCalculator() {
     form.reset(defaultValues);
     setDCRResult(null);
     setCalculationDetails("");
+    setSelectedPreset(null);
+  };
+
+  const handlePresetChange = (value: string) => {
+    const preset = camPresets.find((p) => p.name === value);
+    if (preset) {
+      setSelectedPreset(preset);
+      form.setValue("intakeDuration", preset.intakeDuration);
+      form.setValue("lsa", preset.lsa);
+      if (preset.advertisedIntakeDuration) {
+        form.setValue("advertisedIntakeDuration", preset.advertisedIntakeDuration);
+      } else {
+        form.setValue("advertisedIntakeDuration", null);
+      }
+      if (preset.camAdvance !== undefined) {
+        form.setValue("camAdvance", preset.camAdvance);
+      } else {
+        form.setValue("camAdvance", null);
+      }
+    }
   };
 
   return (
@@ -320,11 +387,46 @@ export function DCRCalculator() {
               />
             </div>
 
-            <div className="flex space-x-2">
-              <Button type="submit" style={{ backgroundColor: "oklch(48.8% 0.243 264.376)" }}>Calculate</Button>
-              <Button type="button" variant="outline" onClick={handleReset}>
-                Reset
-              </Button>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex space-x-2">
+                <Button type="submit" style={{ backgroundColor: "oklch(48.8% 0.243 264.376)" }}>Calculate</Button>
+                <Button type="button" variant="outline" onClick={handleReset}>
+                  Reset
+                </Button>
+              </div>
+              <TooltipProvider>
+                <Select onValueChange={handlePresetChange}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SelectTrigger 
+                        className="w-full sm:w-[250px] font-mono"
+                        style={{ backgroundColor: "oklch(98.4% 0.003 247.858)" }}
+                      >
+                        <SelectValue placeholder="Select a cam preset..." />
+                      </SelectTrigger>
+                    </TooltipTrigger>
+                    {selectedPreset && (
+                      <TooltipContent className="font-mono">
+                        {formatPresetTooltip(selectedPreset)}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                  <SelectContent className="font-mono">
+                    {camPresets.map((preset) => (
+                      <Tooltip key={preset.name}>
+                        <TooltipTrigger asChild>
+                          <SelectItem value={preset.name}>
+                            {preset.name}
+                          </SelectItem>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="font-mono">
+                          {formatPresetTooltip(preset)}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </TooltipProvider>
             </div>
           </form>
         </Form>
