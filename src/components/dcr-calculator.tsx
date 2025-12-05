@@ -252,13 +252,13 @@ export function DCRCalculator() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-x-6 sm:[grid-auto-rows:auto]">
               <FormField
                 control={form.control}
                 name="stroke"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Stroke (mm)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Stroke (mm)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.1" {...field} />
                     </FormControl>
@@ -271,8 +271,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="staticCR"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Static CR (e.g. 10.2)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Static CR (e.g. 10.2)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.1" {...field} />
                     </FormControl>
@@ -285,8 +285,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="intakeDuration"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Intake Duration @ 0.050" (deg)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Intake Duration @ 0.050" (deg)</FormLabel>
                     <FormControl>
                       <Input type="number" {...field} />
                     </FormControl>
@@ -299,8 +299,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="lsa"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Lobe Separation Angle (deg)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Lobe Separation Angle (deg)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.1" {...field} />
                     </FormControl>
@@ -313,8 +313,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="rodLength"
                 render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem>
-                    <FormLabel>Rod Length (mm, optional)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Rod Length (mm, optional)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -338,8 +338,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="advertisedIntakeDuration"
                 render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem>
-                    <FormLabel>Advertised Duration (deg, optional)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Advertised Duration (deg, optional)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -362,8 +362,8 @@ export function DCRCalculator() {
                 control={form.control}
                 name="camAdvance"
                 render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem>
-                    <FormLabel>Cam Advance (deg, optional)</FormLabel>
+                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
+                    <FormLabel className="self-end">Cam Advance (deg, optional)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
