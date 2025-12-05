@@ -7,7 +7,7 @@ function App() {
       <header className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-2">DCR Calculator</h1>
         <p className="text-muted-foreground">
-          Calculate Dynamic Compression Ratio based on valve timing (LSA, Duration @ 0.050").
+          Calculate Dynamic Compression Ratio based on camshaft specs & valve timing.
         </p>
       </header>
       <DCRCalculator />
