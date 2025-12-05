@@ -252,7 +252,7 @@ export function DCRCalculator() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="stroke"
@@ -260,7 +260,7 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Stroke (mm)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" className="max-w-[150px]" {...field} />
+                      <Input type="number" step="0.1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -274,7 +274,7 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Static CR (e.g. 10.2)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" className="max-w-[150px]" {...field} />
+                      <Input type="number" step="0.1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -288,7 +288,7 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Intake Duration @ 0.050" (deg)</FormLabel>
                     <FormControl>
-                      <Input type="number" className="max-w-[150px]" {...field} />
+                      <Input type="number" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -302,7 +302,7 @@ export function DCRCalculator() {
                   <FormItem>
                     <FormLabel>Lobe Separation Angle (deg)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" className="max-w-[150px]" {...field} />
+                      <Input type="number" step="0.1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -320,7 +320,6 @@ export function DCRCalculator() {
                         type="number"
                         step="0.1"
                         placeholder="Estimated if blank"
-                        className="max-w-[150px]"
                         value={value === null ? "" : value}
                         onChange={e => {
                           const value = e.target.value === "" ? null : Number(e.target.value);
@@ -345,7 +344,6 @@ export function DCRCalculator() {
                       <Input
                         type="number"
                         placeholder="Seat-to-seat"
-                        className="max-w-[150px]"
                         value={value === null ? "" : value}
                         onChange={e => {
                           const value = e.target.value === "" ? null : Number(e.target.value);
@@ -371,7 +369,6 @@ export function DCRCalculator() {
                         type="number"
                         step="0.5"
                         placeholder="0 (default)"
-                        className="max-w-[150px]"
                         value={value === null ? "" : value}
                         onChange={e => {
                           const value = e.target.value === "" ? null : Number(e.target.value);
@@ -389,7 +386,7 @@ export function DCRCalculator() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex space-x-2">
-                <Button type="submit" style={{ backgroundColor: "oklch(48.8% 0.243 264.376)" }}>Calculate</Button>
+                <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">Calculate</Button>
                 <Button type="button" variant="outline" onClick={handleReset}>
                   Reset
                 </Button>
@@ -399,8 +396,7 @@ export function DCRCalculator() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <SelectTrigger 
-                        className="w-full sm:w-[250px] font-mono"
-                        style={{ backgroundColor: "oklch(98.4% 0.003 247.858)" }}
+                        className="w-full sm:w-[250px] font-mono bg-muted"
                       >
                         <SelectValue placeholder="Select a cam preset..." />
                       </SelectTrigger>
@@ -432,7 +428,7 @@ export function DCRCalculator() {
         </Form>
 
         {dcrResult !== null && (
-          <div className="mt-6 p-4 border rounded-md bg-gray-100">
+          <div className="mt-6 p-4 border-2 border-border bg-secondary shadow-md">
             <h3 className="text-lg font-semibold mb-2">Result:</h3>
             <p className="text-2xl font-bold">{dcrResult}:1</p>
             <p className="text-sm text-muted-foreground mt-1">{calculationDetails}</p>
