@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import "./dcr-calculator.css";
 
 import {
   Card,
@@ -112,7 +111,11 @@ const defaultValues: CalculatorFormValues = {
   camAdvance: null, // Cam advance in degrees
 };
 
-// DCR calculation function
+type DCRResult = {
+  dcr: number;
+  warning?: string;
+};
+
 function calculateDCR(
   strokeMM: number,
   staticCR: number,
@@ -121,87 +124,62 @@ function calculateDCR(
   rodLengthMM: number | null | undefined,
   advertisedIntakeDuration: number | null | undefined,
   camAdvance: number | null | undefined,
-): number {
-  // Estimate rod length if not provided
+): DCRResult {
   const actualRodLengthMM =
     rodLengthMM && rodLengthMM > 0 ? rodLengthMM : strokeMM * 1.7;
-
-  // Use 0 if cam advance not provided
   const actualCamAdvance = camAdvance ?? 0;
 
-  let ivcAngleABDC: number;
+  // Determine ramp degrees from advertised duration or use a typical default
+  const rampDegrees =
+    advertisedIntakeDuration && advertisedIntakeDuration > intakeDurationAt050
+      ? (advertisedIntakeDuration - intakeDurationAt050) / 2
+      : 20;
 
-  // Determine IVC Angle based on duration/LSA and ramp
-  let rampDegrees: number;
-  if (
-    advertisedIntakeDuration &&
-    typeof advertisedIntakeDuration === "number" &&
-    advertisedIntakeDuration > intakeDurationAt050
-  ) {
-    rampDegrees = (advertisedIntakeDuration - intakeDurationAt050) / 2;
-  } else {
-    rampDegrees = 20; // Default estimate (~40° seat-to-seat difference typical for street performance cams)
-  }
   // Advancing the cam (positive value) closes the intake valve earlier, reducing IVC ABDC
-  ivcAngleABDC = intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
+  let ivcAngleABDC = intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
 
-  // Ensure ivcAngleABDC is within a reasonable range (e.g., > 0 and < 180)
+  let warning: string | undefined;
   const clampedIvcAngleABDC = Math.max(1, Math.min(ivcAngleABDC, 179));
   if (clampedIvcAngleABDC !== ivcAngleABDC) {
-    console.warn(
-      `IVC angle ${ivcAngleABDC.toFixed(1)} was outside expected range (1-179) and clamped to ${clampedIvcAngleABDC}. Check inputs.`,
-    );
+    warning = `IVC angle ${ivcAngleABDC.toFixed(1)}° was outside expected range (1-179°) and clamped. Check inputs.`;
     ivcAngleABDC = clampedIvcAngleABDC;
   }
 
-  // Calculate DCR using the determined IVC
   const thetaDegrees = 180 + ivcAngleABDC;
   const thetaRadians = (thetaDegrees * Math.PI) / 180;
   const crankRadiusMM = strokeMM / 2;
   const R = actualRodLengthMM / crankRadiusMM;
   const cosTheta = Math.cos(thetaRadians);
   const sinTheta = Math.sin(thetaRadians);
-  // Prevent square root of negative number
   const sqrtTerm = Math.sqrt(Math.max(0, R * R - sinTheta * sinTheta));
   const effectiveStrokeRatio = 0.5 * (1 - cosTheta + R - sqrtTerm);
   const clampedESR = Math.max(0, Math.min(effectiveStrokeRatio, 1));
   const dcr = 1 + clampedESR * (staticCR - 1);
 
-  return parseFloat(dcr.toFixed(2));
+  return { dcr: parseFloat(dcr.toFixed(2)), warning };
 }
 
 export function DCRCalculator() {
-  const [dcrResult, setDCRResult] = useState<number | null>(null);
+  const [dcrResult, setDCRResult] = useState<DCRResult | null>(null);
   const [calculationDetails, setCalculationDetails] = useState<string>("");
   const [selectedPreset, setSelectedPreset] = useState<CamPreset | null>(null);
 
   const form = useForm<CalculatorFormValues>({
     resolver: zodResolver(calculatorFormSchema),
     defaultValues,
-    mode: "onChange", // Validate on change
+    mode: "onChange",
   });
 
-  // Form setup using useForm hook with zodResolver
-
   const onSubmit = (data: CalculatorFormValues) => {
-    // Determine calculation method string based on submitted data for feedback
-    let ivcMethod = "";
-    if (
-      data.advertisedIntakeDuration &&
-      typeof data.advertisedIntakeDuration === "number" &&
-      data.advertisedIntakeDuration > data.intakeDuration
-    ) {
-      ivcMethod = "Using Advertised Duration";
-    } else {
-      ivcMethod = "Using default ramp estimate";
-    }
+    const ivcMethod =
+      data.advertisedIntakeDuration && data.advertisedIntakeDuration > data.intakeDuration
+        ? "Using Advertised Duration"
+        : "Using default ramp estimate";
 
     const rodMethod =
-      data.rodLength === null || data.rodLength <= 0
-        ? "(Rod length estimated)"
-        : "";
+      data.rodLength === null || data.rodLength <= 0 ? "(Rod length estimated)" : "";
 
-    const dcr = calculateDCR(
+    const result = calculateDCR(
       data.stroke,
       data.staticCR,
       data.intakeDuration,
@@ -211,7 +189,7 @@ export function DCRCalculator() {
       data.camAdvance,
     );
 
-    setDCRResult(dcr);
+    setDCRResult(result);
     setCalculationDetails(`${ivcMethod} ${rodMethod}`.trim());
   };
 
@@ -430,8 +408,11 @@ export function DCRCalculator() {
         {dcrResult !== null && (
           <div className="mt-6 p-4 border-2 border-border bg-secondary shadow-md">
             <h3 className="text-lg font-semibold mb-2">Result:</h3>
-            <p className="text-2xl font-bold">{dcrResult}:1</p>
+            <p className="text-2xl font-bold">{dcrResult.dcr}:1</p>
             <p className="text-sm text-muted-foreground mt-1">{calculationDetails}</p>
+            {dcrResult.warning && (
+              <p className="text-sm text-destructive mt-2">{dcrResult.warning}</p>
+            )}
           </div>
         )}
 
