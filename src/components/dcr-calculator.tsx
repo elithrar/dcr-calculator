@@ -69,33 +69,29 @@ function formatPresetTooltip(preset: CamPreset): string {
 
 // Form schema validation
 const calculatorFormSchema = z.object({
-  stroke: z.coerce.number().positive("Stroke must be positive").default(70.4),
-  staticCR: z.coerce
+  stroke: z.number().positive("Stroke must be positive"),
+  staticCR: z
     .number()
-    .positive("Static CR must be positive")
-    .default(10.2),
-  intakeDuration: z.coerce
+    .positive("Static CR must be positive"),
+  intakeDuration: z
     .number()
-    .positive('Duration @ 0.050" must be positive')
-    .default(242), // Duration @ 0.050"
-  lsa: z.coerce.number().positive("LSA must be positive").default(114),
-  rodLength: z.coerce
+    .positive('Duration @ 0.050" must be positive'), // Duration @ 0.050"
+  lsa: z.number().positive("LSA must be positive"),
+  rodLength: z
     .number()
     .positive("Rod length must be positive")
-    .optional()
-    .nullable()
-    .default(null),
-  advertisedIntakeDuration: z.coerce
+    .nullable(),
+  advertisedIntakeDuration: z
     .number()
     .positive("Advertised duration must be positive")
-    .optional()
-    .nullable()
-    .default(null), // Optional seat-to-seat duration
-  camAdvance: z.coerce
+    .nullable(), // Optional seat-to-seat duration
+  camAdvance: z
     .number()
-    .optional()
-    .nullable()
-    .default(null), // Cam advance in degrees (positive = advanced, negative = retarded)
+    .nullable(), // Cam advance in degrees (positive = advanced, negative = retarded)
+  intakeValveClosingAbdc: z
+    .number()
+    .positive("IVC must be positive")
+    .nullable(), // Optional direct intake valve closing angle ABDC
 });
 
 type CalculatorFormValues = z.infer<typeof calculatorFormSchema>;
@@ -109,10 +105,13 @@ const defaultValues: CalculatorFormValues = {
   rodLength: null,
   advertisedIntakeDuration: null, // Seat-to-seat duration
   camAdvance: null, // Cam advance in degrees
+  intakeValveClosingAbdc: null, // Direct IVC ABDC from cam card
 };
 
 type DCRResult = {
   dcr: number;
+  effectiveStrokeMM: number;
+  ivcAngleABDC: number;
   warning?: string;
 };
 
@@ -124,6 +123,7 @@ function calculateDCR(
   rodLengthMM: number | null | undefined,
   advertisedIntakeDuration: number | null | undefined,
   camAdvance: number | null | undefined,
+  intakeValveClosingAbdc: number | null | undefined,
 ): DCRResult {
   const actualRodLengthMM =
     rodLengthMM && rodLengthMM > 0 ? rodLengthMM : strokeMM * 1.7;
@@ -135,8 +135,10 @@ function calculateDCR(
       ? (advertisedIntakeDuration - intakeDurationAt050) / 2
       : 20;
 
-  // Advancing the cam (positive value) closes the intake valve earlier, reducing IVC ABDC
-  let ivcAngleABDC = intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
+  // Direct IVC from a cam card is usually more accurate than estimating it from duration and LSA.
+  let ivcAngleABDC = intakeValveClosingAbdc && intakeValveClosingAbdc > 0
+    ? intakeValveClosingAbdc
+    : intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
 
   let warning: string | undefined;
   const clampedIvcAngleABDC = Math.max(1, Math.min(ivcAngleABDC, 179));
@@ -154,9 +156,15 @@ function calculateDCR(
   const sqrtTerm = Math.sqrt(Math.max(0, R * R - sinTheta * sinTheta));
   const effectiveStrokeRatio = 0.5 * (1 - cosTheta + R - sqrtTerm);
   const clampedESR = Math.max(0, Math.min(effectiveStrokeRatio, 1));
+  const effectiveStrokeMM = strokeMM * clampedESR;
   const dcr = 1 + clampedESR * (staticCR - 1);
 
-  return { dcr: parseFloat(dcr.toFixed(2)), warning };
+  return {
+    dcr: parseFloat(dcr.toFixed(2)),
+    effectiveStrokeMM: parseFloat(effectiveStrokeMM.toFixed(1)),
+    ivcAngleABDC: parseFloat(ivcAngleABDC.toFixed(1)),
+    warning,
+  };
 }
 
 export function DCRCalculator() {
@@ -171,8 +179,9 @@ export function DCRCalculator() {
   });
 
   const onSubmit = (data: CalculatorFormValues) => {
-    const ivcMethod =
-      data.advertisedIntakeDuration && data.advertisedIntakeDuration > data.intakeDuration
+    const ivcMethod = data.intakeValveClosingAbdc && data.intakeValveClosingAbdc > 0
+      ? "Using direct IVC"
+      : data.advertisedIntakeDuration && data.advertisedIntakeDuration > data.intakeDuration
         ? "Using Advertised Duration"
         : "Using default ramp estimate";
 
@@ -187,10 +196,18 @@ export function DCRCalculator() {
       data.rodLength,
       data.advertisedIntakeDuration,
       data.camAdvance,
+      data.intakeValveClosingAbdc,
     );
 
     setDCRResult(result);
-    setCalculationDetails(`${ivcMethod} ${rodMethod}`.trim());
+    setCalculationDetails(
+      [
+        ivcMethod,
+        rodMethod,
+        `IVC ${result.ivcAngleABDC}° ABDC`,
+        `Effective stroke ${result.effectiveStrokeMM} mm`,
+      ].filter(Boolean).join(" | "),
+    );
   };
 
   const handleReset = () => {
@@ -216,6 +233,7 @@ export function DCRCalculator() {
       } else {
         form.setValue("camAdvance", null);
       }
+      form.setValue("intakeValveClosingAbdc", null);
     }
   };
 
@@ -223,8 +241,8 @@ export function DCRCalculator() {
     <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
         <CardDescription className="text-xs text-center">
-          Providing Advertised Duration and Cam Advance improves accuracy.
-          Rod length is estimated if not provided.
+          Direct IVC is best if your cam card lists it. Otherwise, advertised
+          duration and cam advance improve the estimate. Rod length is estimated if blank.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -234,11 +252,16 @@ export function DCRCalculator() {
               <FormField
                 control={form.control}
                 name="stroke"
-                render={({ field }) => (
+                render={({ field: { onChange, ...fieldProps } }) => (
                   <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
                     <FormLabel className="self-end">Stroke (mm)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        onChange={e => onChange(Number(e.target.value))}
+                        {...fieldProps}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -248,11 +271,16 @@ export function DCRCalculator() {
               <FormField
                 control={form.control}
                 name="staticCR"
-                render={({ field }) => (
+                render={({ field: { onChange, ...fieldProps } }) => (
                   <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
                     <FormLabel className="self-end">Static CR (e.g. 10.2)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        onChange={e => onChange(Number(e.target.value))}
+                        {...fieldProps}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -262,11 +290,15 @@ export function DCRCalculator() {
               <FormField
                 control={form.control}
                 name="intakeDuration"
-                render={({ field }) => (
+                render={({ field: { onChange, ...fieldProps } }) => (
                   <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
                     <FormLabel className="self-end">Intake Duration @ 0.050" (deg)</FormLabel>
                     <FormControl>
-                      <Input type="number" {...field} />
+                      <Input
+                        type="number"
+                        onChange={e => onChange(Number(e.target.value))}
+                        {...fieldProps}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -276,11 +308,16 @@ export function DCRCalculator() {
               <FormField
                 control={form.control}
                 name="lsa"
-                render={({ field }) => (
+                render={({ field: { onChange, ...fieldProps } }) => (
                   <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
                     <FormLabel className="self-end">Lobe Separation Angle (deg)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        onChange={e => onChange(Number(e.target.value))}
+                        {...fieldProps}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -356,6 +393,31 @@ export function DCRCalculator() {
                       />
                     </FormControl>
                     <FormDescription className="text-xs">Typically 2-4° for street cams. Positive = advanced.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="intakeValveClosingAbdc"
+                render={({ field: { value, onChange, ...fieldProps } }) => (
+                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
+                    <FormLabel className="self-end">IVC ABDC (deg, optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        placeholder="Overrides estimate"
+                        value={value === null ? "" : value}
+                        onChange={e => {
+                          const value = e.target.value === "" ? null : Number(e.target.value);
+                          onChange(value);
+                        }}
+                        {...fieldProps}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">Use seat/advertised intake closing from a cam card</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
