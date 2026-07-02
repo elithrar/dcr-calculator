@@ -36,10 +36,11 @@ import {
 } from "@/components/ui/tooltip";
 import {
   calculateDCR,
-  calculateStaticCR,
   PORSCHE_SC_ROD_LENGTH_MM,
+  resolveStaticCR,
   type DCRResult,
 } from "@/lib/dcr";
+import { parseOptionalNumber, parseRequiredNumber } from "@/lib/form-numbers";
 
 type CamPreset = {
   name: string;
@@ -113,32 +114,56 @@ function formatCamPresetTooltip(preset: CamPreset): string {
   return text;
 }
 
-const optionalNumber = z.number().positive().nullable();
+const requiredPositive = z
+  .number()
+  .refine((value) => Number.isFinite(value), "Enter a valid number")
+  .refine((value) => value > 0, "Must be positive");
+
+const optionalNumber = z
+  .number()
+  .nullable()
+  .refine((value) => value === null || value > 0, "Must be positive");
 
 const calculatorFormSchema = z.object({
-  stroke: z.number().positive("Stroke must be positive"),
-  staticCR: z.number().positive("Static CR must be positive"),
-  intakeDuration: z.number().positive('Duration @ 0.050" must be positive'),
-  lsa: z.number().positive("LSA must be positive"),
+  stroke: requiredPositive,
+  staticCR: requiredPositive,
+  intakeDuration: requiredPositive,
+  lsa: requiredPositive,
   rodLength: optionalNumber,
   intakeDurationAt1mm: optionalNumber,
-  camAdvance: z.number().nullable(),
+  camAdvance: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
   overlapLiftMM: optionalNumber,
   overlapLiftNominalMM: optionalNumber,
-  intakeValveClosingAbdc: z.number().nullable(),
+  intakeValveClosingAbdc: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
   bore: optionalNumber,
-  deckHeight: z.number().min(0).nullable(),
+  deckHeight: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || value >= 0, "Must be zero or positive"),
   headVolumeCC: optionalNumber,
-  pistonCrownVolumeCC: z.number().nullable(),
+  pistonCrownVolumeCC: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
+  gasketThicknessMM: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || value >= 0, "Must be zero or positive"),
 });
 
 type CalculatorFormValues = z.infer<typeof calculatorFormSchema>;
 
 const defaultValues: CalculatorFormValues = {
   stroke: 70.4,
-  staticCR: 10.2,
-  intakeDuration: 242,
-  lsa: 114,
+  staticCR: 9.0,
+  intakeDuration: 228,
+  lsa: 113,
   rodLength: null,
   intakeDurationAt1mm: null,
   camAdvance: null,
@@ -149,34 +174,8 @@ const defaultValues: CalculatorFormValues = {
   deckHeight: null,
   headVolumeCC: null,
   pistonCrownVolumeCC: null,
+  gasketThicknessMM: null,
 };
-
-function resolveStaticCR(data: CalculatorFormValues): { staticCR: number; note?: string } {
-  const hasGeometry =
-    data.bore != null &&
-    data.bore > 0 &&
-    data.deckHeight != null &&
-    data.deckHeight >= 0 &&
-    data.headVolumeCC != null &&
-    data.headVolumeCC > 0;
-
-  if (!hasGeometry) {
-    return { staticCR: data.staticCR };
-  }
-
-  const computed = calculateStaticCR({
-    boreMM: data.bore!,
-    strokeMM: data.stroke,
-    deckHeightMM: data.deckHeight!,
-    headVolumeCC: data.headVolumeCC!,
-    pistonCrownVolumeCC: data.pistonCrownVolumeCC ?? 0,
-  });
-
-  return {
-    staticCR: parseFloat(computed.toFixed(2)),
-    note: `Static CR computed from geometry (${computed.toFixed(2)}:1)`,
-  };
-}
 
 function OptionalNumberInput({
   value,
@@ -197,8 +196,30 @@ function OptionalNumberInput({
       placeholder={placeholder}
       value={value === null ? "" : value}
       onChange={(e) => {
-        const next = e.target.value === "" ? null : Number(e.target.value);
-        onChange(next);
+        onChange(parseOptionalNumber(e.target.value));
+      }}
+      {...props}
+    />
+  );
+}
+
+function RequiredNumberInput({
+  value,
+  onChange,
+  step = "0.1",
+  ...props
+}: {
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  step?: string;
+} & Omit<ComponentProps<typeof Input>, "value" | "onChange" | "type">) {
+  return (
+    <Input
+      type="number"
+      step={step}
+      value={value ?? ""}
+      onChange={(e) => {
+        onChange(parseRequiredNumber(e.target.value));
       }}
       {...props}
     />
@@ -219,9 +240,28 @@ export function DCRCalculator() {
   });
 
   const onSubmit = (data: CalculatorFormValues) => {
-    const { staticCR, note } = resolveStaticCR(data);
-    setStaticCRNote(note ?? "");
+    const staticCRResult = resolveStaticCR({
+      manualStaticCR: data.staticCR,
+      boreMM: data.bore ?? 0,
+      strokeMM: data.stroke,
+      deckHeightMM: data.deckHeight ?? 0,
+      headVolumeCC: data.headVolumeCC ?? 0,
+      pistonCrownVolumeCC: data.pistonCrownVolumeCC ?? 0,
+      gasketThicknessMM: data.gasketThicknessMM ?? 0,
+    });
 
+    if (staticCRResult.source === "geometry") {
+      form.setValue("staticCR", staticCRResult.staticCR);
+      setStaticCRNote(
+        `Using static CR ${staticCRResult.staticCR}:1 computed from geometry (manual entry was ${staticCRResult.manualStaticCR}:1).`,
+      );
+    } else if ("error" in staticCRResult && staticCRResult.error) {
+      setStaticCRNote(staticCRResult.error);
+    } else {
+      setStaticCRNote("");
+    }
+
+    const staticCR = staticCRResult.staticCR;
     const rodEstimated = data.rodLength == null || data.rodLength <= 0;
 
     const result = calculateDCR({
@@ -360,14 +400,13 @@ export function DCRCalculator() {
                 <FormField
                   control={form.control}
                   name="stroke"
-                  render={({ field: { onChange, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel>Stroke (mm)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          onChange={(e) => onChange(Number(e.target.value))}
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
                           {...fieldProps}
                         />
                       </FormControl>
@@ -378,19 +417,18 @@ export function DCRCalculator() {
                 <FormField
                   control={form.control}
                   name="staticCR"
-                  render={({ field: { onChange, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel>Static CR</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          onChange={(e) => onChange(Number(e.target.value))}
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
                           {...fieldProps}
                         />
                       </FormControl>
                       <FormDescription className="text-xs">
-                        From piston spec sheet or measured build
+                        From piston spec sheet, or computed when bore + deck + chamber are filled
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -399,13 +437,14 @@ export function DCRCalculator() {
                 <FormField
                   control={form.control}
                   name="intakeDuration"
-                  render={({ field: { onChange, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel>Intake Duration @ 0.050&quot; (deg)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          onChange={(e) => onChange(Number(e.target.value))}
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
+                          step="1"
                           {...fieldProps}
                         />
                       </FormControl>
@@ -416,14 +455,13 @@ export function DCRCalculator() {
                 <FormField
                   control={form.control}
                   name="lsa"
-                  render={({ field: { onChange, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel>Lobe Separation Angle (deg)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          onChange={(e) => onChange(Number(e.target.value))}
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
                           {...fieldProps}
                         />
                       </FormControl>
@@ -521,7 +559,7 @@ export function DCRCalculator() {
                           />
                         </FormControl>
                         <FormDescription className="text-xs">
-                          DC cards: 1.6–1.8 mm for 993SS
+                          Requires nominal overlap lift to apply
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -594,6 +632,19 @@ export function DCRCalculator() {
                   />
                   <FormField
                     control={form.control}
+                    name="gasketThicknessMM"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Head Gasket Thickness (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="headVolumeCC"
                     render={({ field }) => (
                       <FormItem>
@@ -602,7 +653,7 @@ export function DCRCalculator() {
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
                         <FormDescription className="text-xs">
-                          With bore + deck, computes static CR automatically
+                          With bore + deck + chamber, overrides manual static CR on calculate
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

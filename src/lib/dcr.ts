@@ -18,9 +18,9 @@ export type DCRInputs = {
   intakeDurationAt1mm?: number | null;
   /** Installed advance in degrees. Positive = advanced (intake closes earlier). */
   camAdvance?: number | null;
-  /** Overlap lift setting from cam card (mm). Refines intake centerline. */
+  /** Overlap lift setting when degreeing cams (mm). Requires nominal to apply. */
   overlapLiftMM?: number | null;
-  /** Nominal overlap lift for the cam profile (mm). Defaults to 1.7 for DC 993SS-style cams. */
+  /** Nominal overlap lift from cam card (mm). Required with overlapLiftMM. */
   overlapLiftNominalMM?: number | null;
   /** Direct intake valve closing angle ABDC from a cam card — highest accuracy. */
   intakeValveClosingAbdc?: number | null;
@@ -46,8 +46,19 @@ export type StaticCRInputs = {
   gasketThicknessMM?: number;
 };
 
+export type StaticCRResolveInput = StaticCRInputs & {
+  manualStaticCR: number;
+};
+
+export type StaticCRResolveResult =
+  | { staticCR: number; source: "manual" }
+  | { staticCR: number; source: "geometry"; computedCR: number; manualStaticCR: number }
+  | { staticCR: number; source: "manual"; error: string };
+
 const DEFAULT_RAMP_DEGREES = 3;
 const OVERLAP_LIFT_DEGREES_PER_MM = 10;
+const MIN_IVC_ABDC = 1;
+const MAX_IVC_ABDC = 179;
 
 /** Cylinder swept volume in cc. */
 export function cylinderSweptVolumeCC(boreMM: number, strokeMM: number): number {
@@ -78,10 +89,52 @@ export function calculateStaticCR({
   return (swept + clearance) / clearance;
 }
 
+export function hasGeometryForStaticCR(
+  boreMM?: number | null,
+  deckHeightMM?: number | null,
+  headVolumeCC?: number | null,
+): boolean {
+  return (
+    boreMM != null &&
+    boreMM > 0 &&
+    deckHeightMM != null &&
+    deckHeightMM >= 0 &&
+    headVolumeCC != null &&
+    headVolumeCC > 0
+  );
+}
+
+/** Resolve static CR from geometry when complete, otherwise use manual entry. */
+export function resolveStaticCR(input: StaticCRResolveInput): StaticCRResolveResult {
+  const { manualStaticCR, ...geometry } = input;
+
+  if (!hasGeometryForStaticCR(geometry.boreMM, geometry.deckHeightMM, geometry.headVolumeCC)) {
+    return { staticCR: manualStaticCR, source: "manual" };
+  }
+
+  try {
+    const computedCR = calculateStaticCR(geometry);
+    const rounded = parseFloat(computedCR.toFixed(2));
+    return {
+      staticCR: rounded,
+      source: "geometry",
+      computedCR: rounded,
+      manualStaticCR,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid geometry inputs";
+    return {
+      staticCR: manualStaticCR,
+      source: "manual",
+      error: `${message}. Using manual static CR.`,
+    };
+  }
+}
+
 /**
  * Estimate intake centerline (degrees ATDC) from LSA, advance, and overlap lift.
  * Positive cam advance moves the intake centerline earlier (smaller ATDC value).
- * Higher overlap lift vs nominal retards the effective centerline.
+ * Overlap lift adjustment only applies when both actual and nominal lift are provided.
  */
 export function estimateIntakeCenterline(
   lsa: number,
@@ -91,9 +144,13 @@ export function estimateIntakeCenterline(
 ): number {
   let icl = lsa - camAdvance;
 
-  if (overlapLiftMM != null && overlapLiftMM > 0) {
-    const nominal = overlapLiftNominalMM ?? 1.7;
-    const liftShift = (overlapLiftMM - nominal) * OVERLAP_LIFT_DEGREES_PER_MM;
+  if (
+    overlapLiftMM != null &&
+    overlapLiftMM > 0 &&
+    overlapLiftNominalMM != null &&
+    overlapLiftNominalMM > 0
+  ) {
+    const liftShift = (overlapLiftMM - overlapLiftNominalMM) * OVERLAP_LIFT_DEGREES_PER_MM;
     icl -= liftShift;
   }
 
@@ -127,7 +184,10 @@ export function estimateIVCABDC(
     overlapLiftNominalMM,
   );
 
-  if (intakeDurationAt1mm != null && intakeDurationAt1mm > intakeDurationAt050) {
+  const hasValidDurationAt1mm =
+    intakeDurationAt1mm != null && intakeDurationAt1mm > intakeDurationAt050;
+
+  if (hasValidDurationAt1mm) {
     const ivc = icl + intakeDurationAt1mm / 2 - 180;
     return {
       ivcABDC: ivc,
@@ -135,19 +195,40 @@ export function estimateIVCABDC(
     };
   }
 
-  const rampDegrees =
-    intakeDurationAt1mm != null && intakeDurationAt1mm > intakeDurationAt050
-      ? (intakeDurationAt1mm - intakeDurationAt050) / 2
-      : DEFAULT_RAMP_DEGREES;
-
+  const rampDegrees = DEFAULT_RAMP_DEGREES;
   const ivc = icl + intakeDurationAt050 / 2 - 180 + rampDegrees;
-  return {
-    ivcABDC: ivc,
-    method:
-      intakeDurationAt1mm != null
-        ? "Duration @ 0.050\" + ramp from @ 1 mm"
-        : "Duration @ 0.050\" + default ramp estimate",
-  };
+
+  const method =
+    intakeDurationAt1mm != null
+      ? "Duration @ 0.050\" + default ramp (@ 1 mm must exceed @ 0.050\")"
+      : "Duration @ 0.050\" + default ramp estimate";
+
+  return { ivcABDC: ivc, method };
+}
+
+/**
+ * Clamp IVC to a calculable range and return any warning.
+ */
+export function clampIVCABDC(ivcABDC: number): { ivcABDC: number; warning?: string } {
+  if (ivcABDC <= 0) {
+    return {
+      ivcABDC: MIN_IVC_ABDC,
+      warning: `IVC ${ivcABDC.toFixed(1)}° ABDC is before BDC and was clamped to ${MIN_IVC_ABDC}°.`,
+    };
+  }
+  if (ivcABDC >= 180) {
+    return {
+      ivcABDC: MAX_IVC_ABDC,
+      warning: `IVC ${ivcABDC.toFixed(1)}° ABDC is very late and was clamped to ${MAX_IVC_ABDC}°.`,
+    };
+  }
+  if (ivcABDC < MIN_IVC_ABDC) {
+    return {
+      ivcABDC: MIN_IVC_ABDC,
+      warning: `IVC ${ivcABDC.toFixed(1)}° ABDC was clamped to ${MIN_IVC_ABDC}°.`,
+    };
+  }
+  return { ivcABDC };
 }
 
 /**
@@ -170,7 +251,7 @@ export function effectiveStrokeRatioAtIVC(
   return Math.max(0, Math.min(esr, 1));
 }
 
-/** Default rod length estimate when not provided (Porsche air-cooled ~1.82:1 rod/stroke). */
+/** Default rod length estimate when not provided (Porsche air-cooled ~1.815:1 rod/stroke). */
 export function estimateRodLengthMM(strokeMM: number): number {
   return strokeMM * 1.815;
 }
@@ -206,17 +287,9 @@ export function calculateDCR(inputs: DCRInputs): DCRResult {
     intakeValveClosingAbdc,
   );
 
-  let warning: string | undefined;
-  let ivcAngleABDC = rawIVC;
+  const { ivcABDC, warning } = clampIVCABDC(rawIVC);
 
-  if (ivcAngleABDC <= 0) {
-    warning = `IVC ${ivcAngleABDC.toFixed(1)}° ABDC is before BDC (intake closes early). DCR may exceed static CR.`;
-  } else if (ivcAngleABDC >= 180) {
-    warning = `IVC ${ivcAngleABDC.toFixed(1)}° ABDC is very late. Check cam timing inputs.`;
-    ivcAngleABDC = 179;
-  }
-
-  const clampedESR = effectiveStrokeRatioAtIVC(strokeMM, actualRodLengthMM, ivcAngleABDC);
+  const clampedESR = effectiveStrokeRatioAtIVC(strokeMM, actualRodLengthMM, ivcABDC);
   const effectiveStrokeMM = strokeMM * clampedESR;
   const dcr = 1 + clampedESR * (staticCR - 1);
 
@@ -224,7 +297,7 @@ export function calculateDCR(inputs: DCRInputs): DCRResult {
     dcr: parseFloat(dcr.toFixed(2)),
     effectiveStrokeMM: parseFloat(effectiveStrokeMM.toFixed(1)),
     effectiveStrokeRatio: parseFloat(clampedESR.toFixed(4)),
-    ivcAngleABDC: parseFloat(ivcAngleABDC.toFixed(1)),
+    ivcAngleABDC: parseFloat(ivcABDC.toFixed(1)),
     staticCR,
     rodLengthMM: actualRodLengthMM,
     ivcMethod,
