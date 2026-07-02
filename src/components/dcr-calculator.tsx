@@ -396,7 +396,8 @@ export function DCRCalculator() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">Required — paper data points</h3>
-              <div className="aligned-form-grid">
+              <div className="aligned-form-section">
+                <div className="aligned-form-grid">
                 <FormField
                   control={form.control}
                   name="stroke"
@@ -469,6 +470,7 @@ export function DCRCalculator() {
                     </FormItem>
                   )}
                 />
+                </div>
               </div>
             </div>
 
@@ -482,7 +484,8 @@ export function DCRCalculator() {
               </button>
 
               {showOptional && (
-                <div className="aligned-form-grid">
+                <div className="aligned-form-section">
+                  <div className="aligned-form-grid">
                   <FormField
                     control={form.control}
                     name="rodLength"
@@ -675,6 +678,7 @@ export function DCRCalculator() {
                       </FormItem>
                     )}
                   />
+                  </div>
                 </div>
               )}
             </div>
