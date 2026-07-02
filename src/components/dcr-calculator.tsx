@@ -396,12 +396,12 @@ export function DCRCalculator() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">Required — paper data points</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="aligned-form-grid">
                 <FormField
                   control={form.control}
                   name="stroke"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Stroke (mm)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -418,7 +418,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="staticCR"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Static CR</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -438,7 +438,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="intakeDuration"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Intake Duration @ 0.050&quot; (deg)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -456,7 +456,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="lsa"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Lobe Separation Angle (deg)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -482,12 +482,12 @@ export function DCRCalculator() {
               </button>
 
               {showOptional && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="aligned-form-grid">
                   <FormField
                     control={form.control}
                     name="rodLength"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Rod Length (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -507,7 +507,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="intakeDurationAt1mm"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Intake Duration @ 1 mm (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -527,7 +527,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="camAdvance"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Cam Advance (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -548,7 +548,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="overlapLiftMM"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Overlap Lift Setting (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -569,7 +569,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="overlapLiftNominalMM"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Nominal Overlap Lift (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -587,7 +587,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="intakeValveClosingAbdc"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>IVC ABDC (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -608,7 +608,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="bore"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Bore (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
@@ -621,7 +621,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="deckHeight"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Deck Height (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
@@ -634,7 +634,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="gasketThicknessMM"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Head Gasket Thickness (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
@@ -647,7 +647,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="headVolumeCC"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Combustion Chamber (cc)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
@@ -663,7 +663,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="pistonCrownVolumeCC"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Piston Crown Volume (cc)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
