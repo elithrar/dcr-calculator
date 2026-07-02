@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,6 +8,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,33 +34,79 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  calculateDCR,
+  PORSCHE_SC_ROD_LENGTH_MM,
+  resolveStaticCR,
+  type DCRResult,
+} from "@/lib/dcr";
+import { parseOptionalNumber, parseRequiredNumber } from "@/lib/form-numbers";
 
-// Cam presets - duration @ 0.050", LSA, advertised duration (if known), typical advance
 type CamPreset = {
   name: string;
-  intakeDuration: number; // Duration @ 0.050"
+  intakeDuration: number;
   lsa: number;
-  advertisedIntakeDuration?: number;
-  camAdvance?: number; // Typical installed advance (positive = advanced)
+  intakeDurationAt1mm?: number;
+  overlapLiftNominal?: number;
+  camAdvance?: number;
+};
+
+type EnginePreset = {
+  name: string;
+  stroke: number;
+  bore?: number;
+  staticCR: number;
+  rodLength?: number;
+  deckHeight?: number;
 };
 
 const camPresets: CamPreset[] = [
-  { name: "911 2.7 (stock)", intakeDuration: 218, lsa: 115, camAdvance: 0 },
-  { name: "911 SC / 3.2 (stock)", intakeDuration: 220, lsa: 115, camAdvance: 0 },
-  { name: "DC 15 (Sport SC)", intakeDuration: 228, lsa: 114, camAdvance: 4 },
-  { name: "DC 30 (Mod Solex)", intakeDuration: 236, lsa: 114, camAdvance: 4 },
-  { name: "DC 40 (Mod S)", intakeDuration: 242, lsa: 114, camAdvance: 4 },
-  { name: "DC 43-113", intakeDuration: 243, lsa: 113, camAdvance: 2 },
-  { name: "DC 60", intakeDuration: 252, lsa: 114, camAdvance: 0 },
-  { name: "DC 993SS", intakeDuration: 242, lsa: 114, camAdvance: 4 },
-  { name: "WebCam 20/21", intakeDuration: 238, lsa: 112, advertisedIntakeDuration: 258, camAdvance: 4 },
-  { name: "WebCam 993SS", intakeDuration: 240, lsa: 112, advertisedIntakeDuration: 260, camAdvance: 4 },
+  { name: "911 2.7 (stock)", intakeDuration: 218, lsa: 115, intakeDurationAt1mm: 226, camAdvance: 0 },
+  { name: "911 SC / 3.2 (stock)", intakeDuration: 228, lsa: 113, intakeDurationAt1mm: 236, overlapLiftNominal: 1.55, camAdvance: 0 },
+  { name: "DC 15 (Sport SC)", intakeDuration: 238, lsa: 113, intakeDurationAt1mm: 244, overlapLiftNominal: 1.9, camAdvance: 4 },
+  { name: "DC 30 (Mod Solex)", intakeDuration: 242, lsa: 102, intakeDurationAt1mm: 248, overlapLiftNominal: 3.8, camAdvance: 4 },
+  { name: "DC 40 (Mod S)", intakeDuration: 259, lsa: 102, intakeDurationAt1mm: 266, overlapLiftNominal: 4.5, camAdvance: 4 },
+  { name: "DC 43-113", intakeDuration: 258, lsa: 112, intakeDurationAt1mm: 264, overlapLiftNominal: 3.0, camAdvance: 2 },
+  { name: "DC 60", intakeDuration: 264, lsa: 102, intakeDurationAt1mm: 271, overlapLiftNominal: 5.0, camAdvance: 0 },
+  { name: "DC 993SS", intakeDuration: 242, lsa: 114, intakeDurationAt1mm: 248, overlapLiftNominal: 1.7, camAdvance: 2 },
+  { name: "WebCam 20/21", intakeDuration: 238, lsa: 112, intakeDurationAt1mm: 258, overlapLiftNominal: 2.0, camAdvance: 4 },
+  { name: "WebCam 993SS", intakeDuration: 240, lsa: 112, intakeDurationAt1mm: 260, overlapLiftNominal: 1.7, camAdvance: 4 },
 ];
 
-function formatPresetTooltip(preset: CamPreset): string {
+const enginePresets: EnginePreset[] = [
+  {
+    name: "3.2SS — 98 mm / SC short block",
+    stroke: 70.4,
+    bore: 98,
+    staticCR: 10.2,
+    rodLength: PORSCHE_SC_ROD_LENGTH_MM,
+    deckHeight: 1,
+  },
+  {
+    name: "911 SC 3.0 (stock)",
+    stroke: 70.4,
+    bore: 95,
+    staticCR: 9.0,
+    rodLength: PORSCHE_SC_ROD_LENGTH_MM,
+    deckHeight: 1,
+  },
+  {
+    name: "911 3.2 Carrera (stock)",
+    stroke: 74.4,
+    bore: 95,
+    staticCR: 10.3,
+    rodLength: 127,
+    deckHeight: 1,
+  },
+];
+
+function formatCamPresetTooltip(preset: CamPreset): string {
   let text = `${preset.intakeDuration}° @ 0.050" | ${preset.lsa}° LSA`;
-  if (preset.advertisedIntakeDuration) {
-    text += ` | ${preset.advertisedIntakeDuration}° adv.`;
+  if (preset.intakeDurationAt1mm) {
+    text += ` | ${preset.intakeDurationAt1mm}° @ 1 mm`;
+  }
+  if (preset.overlapLiftNominal) {
+    text += ` | ${preset.overlapLiftNominal} mm overlap`;
   }
   if (preset.camAdvance !== undefined) {
     text += ` | ${preset.camAdvance}° advance`;
@@ -67,110 +114,124 @@ function formatPresetTooltip(preset: CamPreset): string {
   return text;
 }
 
-// Form schema validation
+const requiredPositive = z
+  .number()
+  .refine((value) => Number.isFinite(value), "Enter a valid number")
+  .refine((value) => value > 0, "Must be positive");
+
+const optionalNumber = z
+  .number()
+  .nullable()
+  .refine((value) => value === null || value > 0, "Must be positive");
+
 const calculatorFormSchema = z.object({
-  stroke: z.number().positive("Stroke must be positive"),
-  staticCR: z
-    .number()
-    .positive("Static CR must be positive"),
-  intakeDuration: z
-    .number()
-    .positive('Duration @ 0.050" must be positive'), // Duration @ 0.050"
-  lsa: z.number().positive("LSA must be positive"),
-  rodLength: z
-    .number()
-    .positive("Rod length must be positive")
-    .nullable(),
-  advertisedIntakeDuration: z
-    .number()
-    .positive("Advertised duration must be positive")
-    .nullable(), // Optional seat-to-seat duration
+  stroke: requiredPositive,
+  staticCR: requiredPositive,
+  intakeDuration: requiredPositive,
+  lsa: requiredPositive,
+  rodLength: optionalNumber,
+  intakeDurationAt1mm: optionalNumber,
   camAdvance: z
     .number()
-    .nullable(), // Cam advance in degrees (positive = advanced, negative = retarded)
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
+  overlapLiftMM: optionalNumber,
+  overlapLiftNominalMM: optionalNumber,
   intakeValveClosingAbdc: z
     .number()
-    .positive("IVC must be positive")
-    .nullable(), // Optional direct intake valve closing angle ABDC
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
+  bore: optionalNumber,
+  deckHeight: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || value >= 0, "Must be zero or positive"),
+  headVolumeCC: optionalNumber,
+  pistonCrownVolumeCC: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || Number.isFinite(value), "Enter a valid number"),
+  gasketThicknessMM: z
+    .number()
+    .nullable()
+    .refine((value) => value === null || value >= 0, "Must be zero or positive"),
 });
 
 type CalculatorFormValues = z.infer<typeof calculatorFormSchema>;
 
-// Default values
 const defaultValues: CalculatorFormValues = {
   stroke: 70.4,
-  staticCR: 10.2,
-  intakeDuration: 242, // Duration @ 0.050"
-  lsa: 114,
+  staticCR: 9.0,
+  intakeDuration: 228,
+  lsa: 113,
   rodLength: null,
-  advertisedIntakeDuration: null, // Seat-to-seat duration
-  camAdvance: null, // Cam advance in degrees
-  intakeValveClosingAbdc: null, // Direct IVC ABDC from cam card
+  intakeDurationAt1mm: null,
+  camAdvance: null,
+  overlapLiftMM: null,
+  overlapLiftNominalMM: null,
+  intakeValveClosingAbdc: null,
+  bore: null,
+  deckHeight: null,
+  headVolumeCC: null,
+  pistonCrownVolumeCC: null,
+  gasketThicknessMM: null,
 };
 
-type DCRResult = {
-  dcr: number;
-  effectiveStrokeMM: number;
-  ivcAngleABDC: number;
-  warning?: string;
-};
+function OptionalNumberInput({
+  value,
+  onChange,
+  placeholder,
+  step = "0.1",
+  ...props
+}: {
+  value: number | null;
+  onChange: (value: number | null) => void;
+  placeholder?: string;
+  step?: string;
+} & Omit<ComponentProps<typeof Input>, "value" | "onChange">) {
+  return (
+    <Input
+      type="number"
+      step={step}
+      placeholder={placeholder}
+      value={value === null ? "" : value}
+      onChange={(e) => {
+        onChange(parseOptionalNumber(e.target.value));
+      }}
+      {...props}
+    />
+  );
+}
 
-function calculateDCR(
-  strokeMM: number,
-  staticCR: number,
-  intakeDurationAt050: number,
-  lsa: number,
-  rodLengthMM: number | null | undefined,
-  advertisedIntakeDuration: number | null | undefined,
-  camAdvance: number | null | undefined,
-  intakeValveClosingAbdc: number | null | undefined,
-): DCRResult {
-  const actualRodLengthMM =
-    rodLengthMM && rodLengthMM > 0 ? rodLengthMM : strokeMM * 1.7;
-  const actualCamAdvance = camAdvance ?? 0;
-
-  // Determine ramp degrees from advertised duration or use a typical default
-  const rampDegrees =
-    advertisedIntakeDuration && advertisedIntakeDuration > intakeDurationAt050
-      ? (advertisedIntakeDuration - intakeDurationAt050) / 2
-      : 20;
-
-  // Direct IVC from a cam card is usually more accurate than estimating it from duration and LSA.
-  let ivcAngleABDC = intakeValveClosingAbdc && intakeValveClosingAbdc > 0
-    ? intakeValveClosingAbdc
-    : intakeDurationAt050 / 2 + lsa - 180 + rampDegrees - actualCamAdvance;
-
-  let warning: string | undefined;
-  const clampedIvcAngleABDC = Math.max(1, Math.min(ivcAngleABDC, 179));
-  if (clampedIvcAngleABDC !== ivcAngleABDC) {
-    warning = `IVC angle ${ivcAngleABDC.toFixed(1)}° was outside expected range (1-179°) and clamped. Check inputs.`;
-    ivcAngleABDC = clampedIvcAngleABDC;
-  }
-
-  const thetaDegrees = 180 + ivcAngleABDC;
-  const thetaRadians = (thetaDegrees * Math.PI) / 180;
-  const crankRadiusMM = strokeMM / 2;
-  const R = actualRodLengthMM / crankRadiusMM;
-  const cosTheta = Math.cos(thetaRadians);
-  const sinTheta = Math.sin(thetaRadians);
-  const sqrtTerm = Math.sqrt(Math.max(0, R * R - sinTheta * sinTheta));
-  const effectiveStrokeRatio = 0.5 * (1 - cosTheta + R - sqrtTerm);
-  const clampedESR = Math.max(0, Math.min(effectiveStrokeRatio, 1));
-  const effectiveStrokeMM = strokeMM * clampedESR;
-  const dcr = 1 + clampedESR * (staticCR - 1);
-
-  return {
-    dcr: parseFloat(dcr.toFixed(2)),
-    effectiveStrokeMM: parseFloat(effectiveStrokeMM.toFixed(1)),
-    ivcAngleABDC: parseFloat(ivcAngleABDC.toFixed(1)),
-    warning,
-  };
+function RequiredNumberInput({
+  value,
+  onChange,
+  step = "0.1",
+  ...props
+}: {
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  step?: string;
+} & Omit<ComponentProps<typeof Input>, "value" | "onChange" | "type">) {
+  return (
+    <Input
+      type="number"
+      step={step}
+      value={value ?? ""}
+      onChange={(e) => {
+        onChange(parseRequiredNumber(e.target.value));
+      }}
+      {...props}
+    />
+  );
 }
 
 export function DCRCalculator() {
   const [dcrResult, setDCRResult] = useState<DCRResult | null>(null);
   const [calculationDetails, setCalculationDetails] = useState<string>("");
-  const [selectedPreset, setSelectedPreset] = useState<CamPreset | null>(null);
+  const [staticCRNote, setStaticCRNote] = useState<string>("");
+  const [selectedCamPreset, setSelectedCamPreset] = useState<CamPreset | null>(null);
+  const [showOptional, setShowOptional] = useState(false);
 
   const form = useForm<CalculatorFormValues>({
     resolver: zodResolver(calculatorFormSchema),
@@ -179,34 +240,51 @@ export function DCRCalculator() {
   });
 
   const onSubmit = (data: CalculatorFormValues) => {
-    const ivcMethod = data.intakeValveClosingAbdc && data.intakeValveClosingAbdc > 0
-      ? "Using direct IVC"
-      : data.advertisedIntakeDuration && data.advertisedIntakeDuration > data.intakeDuration
-        ? "Using Advertised Duration"
-        : "Using default ramp estimate";
+    const staticCRResult = resolveStaticCR({
+      manualStaticCR: data.staticCR,
+      boreMM: data.bore ?? 0,
+      strokeMM: data.stroke,
+      deckHeightMM: data.deckHeight ?? 0,
+      headVolumeCC: data.headVolumeCC ?? 0,
+      pistonCrownVolumeCC: data.pistonCrownVolumeCC ?? 0,
+      gasketThicknessMM: data.gasketThicknessMM ?? 0,
+    });
 
-    const rodMethod =
-      data.rodLength === null || data.rodLength <= 0 ? "(Rod length estimated)" : "";
+    if (staticCRResult.source === "geometry") {
+      form.setValue("staticCR", staticCRResult.staticCR);
+      setStaticCRNote(
+        `Using static CR ${staticCRResult.staticCR}:1 computed from geometry (manual entry was ${staticCRResult.manualStaticCR}:1).`,
+      );
+    } else if ("error" in staticCRResult && staticCRResult.error) {
+      setStaticCRNote(staticCRResult.error);
+    } else {
+      setStaticCRNote("");
+    }
 
-    const result = calculateDCR(
-      data.stroke,
-      data.staticCR,
-      data.intakeDuration,
-      data.lsa,
-      data.rodLength,
-      data.advertisedIntakeDuration,
-      data.camAdvance,
-      data.intakeValveClosingAbdc,
-    );
+    const staticCR = staticCRResult.staticCR;
+    const rodEstimated = data.rodLength == null || data.rodLength <= 0;
+
+    const result = calculateDCR({
+      strokeMM: data.stroke,
+      staticCR,
+      intakeDurationAt050: data.intakeDuration,
+      lsa: data.lsa,
+      rodLengthMM: data.rodLength,
+      intakeDurationAt1mm: data.intakeDurationAt1mm,
+      camAdvance: data.camAdvance,
+      overlapLiftMM: data.overlapLiftMM,
+      overlapLiftNominalMM: data.overlapLiftNominalMM,
+      intakeValveClosingAbdc: data.intakeValveClosingAbdc,
+    });
 
     setDCRResult(result);
     setCalculationDetails(
       [
-        ivcMethod,
-        rodMethod,
+        result.ivcMethod,
+        rodEstimated ? "Rod length estimated" : `Rod ${result.rodLengthMM.toFixed(1)} mm`,
         `IVC ${result.ivcAngleABDC}° ABDC`,
-        `Effective stroke ${result.effectiveStrokeMM} mm`,
-      ].filter(Boolean).join(" | "),
+        `Effective stroke ${result.effectiveStrokeMM} mm (${(result.effectiveStrokeRatio * 100).toFixed(1)}%)`,
+      ].join(" · "),
     );
   };
 
@@ -214,269 +292,429 @@ export function DCRCalculator() {
     form.reset(defaultValues);
     setDCRResult(null);
     setCalculationDetails("");
-    setSelectedPreset(null);
+    setStaticCRNote("");
+    setSelectedCamPreset(null);
+    setShowOptional(false);
   };
 
-  const handlePresetChange = (value: string) => {
+  const handleCamPresetChange = (value: string) => {
     const preset = camPresets.find((p) => p.name === value);
-    if (preset) {
-      setSelectedPreset(preset);
-      form.setValue("intakeDuration", preset.intakeDuration);
-      form.setValue("lsa", preset.lsa);
-      if (preset.advertisedIntakeDuration) {
-        form.setValue("advertisedIntakeDuration", preset.advertisedIntakeDuration);
-      } else {
-        form.setValue("advertisedIntakeDuration", null);
-      }
-      if (preset.camAdvance !== undefined) {
-        form.setValue("camAdvance", preset.camAdvance);
-      } else {
-        form.setValue("camAdvance", null);
-      }
-      form.setValue("intakeValveClosingAbdc", null);
-    }
+    if (!preset) return;
+
+    setSelectedCamPreset(preset);
+    form.setValue("intakeDuration", preset.intakeDuration);
+    form.setValue("lsa", preset.lsa);
+    form.setValue("intakeDurationAt1mm", preset.intakeDurationAt1mm ?? null);
+    form.setValue("overlapLiftNominalMM", preset.overlapLiftNominal ?? null);
+    form.setValue("overlapLiftMM", preset.overlapLiftNominal ?? null);
+    form.setValue("camAdvance", preset.camAdvance ?? null);
+    form.setValue("intakeValveClosingAbdc", null);
   };
+
+  const handleEnginePresetChange = (value: string) => {
+    const preset = enginePresets.find((p) => p.name === value);
+    if (!preset) return;
+
+    form.setValue("stroke", preset.stroke);
+    form.setValue("staticCR", preset.staticCR);
+    form.setValue("rodLength", preset.rodLength ?? null);
+    form.setValue("bore", preset.bore ?? null);
+    form.setValue("deckHeight", preset.deckHeight ?? null);
+  };
+
+  const quickExample = useMemo(
+    () =>
+      calculateDCR({
+        strokeMM: 70.4,
+        staticCR: 10.2,
+        intakeDurationAt050: 242,
+        lsa: 114,
+        rodLengthMM: PORSCHE_SC_ROD_LENGTH_MM,
+        intakeDurationAt1mm: 248,
+        camAdvance: 2,
+        overlapLiftMM: 1.7,
+        overlapLiftNominalMM: 1.7,
+      }),
+    [],
+  );
 
   return (
     <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
-        <CardDescription className="text-xs text-center">
-          Direct IVC is best if your cam card lists it. Otherwise, advertised
-          duration and cam advance improve the estimate. Rod length is estimated if blank.
+        <CardTitle className="text-center text-lg">Dynamic Compression Ratio</CardTitle>
+        <CardDescription className="text-xs text-center space-y-1">
+          <span className="block">
+            Four paper data points get you close: <strong>stroke</strong>,{" "}
+            <strong>static CR</strong>, <strong>duration @ 0.050&quot;</strong>, and{" "}
+            <strong>LSA</strong>.
+          </span>
+          <span className="block">
+            Optional fields refine IVC timing and rod geometry. Direct IVC ABDC from a cam card is best.
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-x-6 sm:[grid-auto-rows:auto]">
-              <FormField
-                control={form.control}
-                name="stroke"
-                render={({ field: { onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Stroke (mm)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        onChange={e => onChange(Number(e.target.value))}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="staticCR"
-                render={({ field: { onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Static CR (e.g. 10.2)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        onChange={e => onChange(Number(e.target.value))}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="intakeDuration"
-                render={({ field: { onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Intake Duration @ 0.050" (deg)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        onChange={e => onChange(Number(e.target.value))}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="lsa"
-                render={({ field: { onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Lobe Separation Angle (deg)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        onChange={e => onChange(Number(e.target.value))}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="rodLength"
-                render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Rod Length (mm, optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        placeholder="Estimated if blank"
-                        value={value === null ? "" : value}
-                        onChange={e => {
-                          const value = e.target.value === "" ? null : Number(e.target.value);
-                          onChange(value);
-                        }}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">Will be estimated if not provided</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="advertisedIntakeDuration"
-                render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Advertised Duration (deg, optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="Seat-to-seat"
-                        value={value === null ? "" : value}
-                        onChange={e => {
-                          const value = e.target.value === "" ? null : Number(e.target.value);
-                          onChange(value);
-                        }}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">Seat-to-seat duration for better accuracy</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="camAdvance"
-                render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
-                    <FormLabel className="self-end">Cam Advance (deg, optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        placeholder="0 (default)"
-                        value={value === null ? "" : value}
-                        onChange={e => {
-                          const value = e.target.value === "" ? null : Number(e.target.value);
-                          onChange(value);
-                        }}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">Typically 2-4° for street cams. Positive = advanced.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="intakeValveClosingAbdc"
-                render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem className="grid grid-rows-[2.5rem_auto_auto] gap-1 content-start">
-                    <FormLabel className="self-end">IVC ABDC (deg, optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        placeholder="Overrides estimate"
-                        value={value === null ? "" : value}
-                        onChange={e => {
-                          const value = e.target.value === "" ? null : Number(e.target.value);
-                          onChange(value);
-                        }}
-                        {...fieldProps}
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">Use seat/advertised intake closing from a cam card</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex space-x-2">
-                <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">Calculate</Button>
-                <Button type="button" variant="outline" onClick={handleReset}>
-                  Reset
-                </Button>
-              </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Select onValueChange={handleEnginePresetChange}>
+                <SelectTrigger className="w-full sm:flex-1 font-mono bg-muted">
+                  <SelectValue placeholder="Engine preset…" />
+                </SelectTrigger>
+                <SelectContent className="font-mono">
+                  {enginePresets.map((preset) => (
+                    <SelectItem key={preset.name} value={preset.name}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <TooltipProvider>
-                <Select onValueChange={handlePresetChange}>
+                <Select onValueChange={handleCamPresetChange}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <SelectTrigger 
-                        className="w-full sm:w-[250px] font-mono bg-muted"
-                      >
-                        <SelectValue placeholder="Select a cam preset..." />
+                      <SelectTrigger className="w-full sm:flex-1 font-mono bg-muted">
+                        <SelectValue placeholder="Cam preset…" />
                       </SelectTrigger>
                     </TooltipTrigger>
-                    {selectedPreset && (
+                    {selectedCamPreset && (
                       <TooltipContent className="font-mono">
-                        {formatPresetTooltip(selectedPreset)}
+                        {formatCamPresetTooltip(selectedCamPreset)}
                       </TooltipContent>
                     )}
                   </Tooltip>
                   <SelectContent className="font-mono">
                     {camPresets.map((preset) => (
-                      <Tooltip key={preset.name}>
-                        <TooltipTrigger asChild>
-                          <SelectItem value={preset.name}>
-                            {preset.name}
-                          </SelectItem>
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="font-mono">
-                          {formatPresetTooltip(preset)}
-                        </TooltipContent>
-                      </Tooltip>
+                      <SelectItem key={preset.name} value={preset.name}>
+                        {preset.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </TooltipProvider>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Required — paper data points</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="stroke"
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                    <FormItem>
+                      <FormLabel>Stroke (mm)</FormLabel>
+                      <FormControl>
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
+                          {...fieldProps}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="staticCR"
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                    <FormItem>
+                      <FormLabel>Static CR</FormLabel>
+                      <FormControl>
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
+                          {...fieldProps}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        From piston spec sheet, or computed when bore + deck + chamber are filled
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="intakeDuration"
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                    <FormItem>
+                      <FormLabel>Intake Duration @ 0.050&quot; (deg)</FormLabel>
+                      <FormControl>
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
+                          step="1"
+                          {...fieldProps}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="lsa"
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                    <FormItem>
+                      <FormLabel>Lobe Separation Angle (deg)</FormLabel>
+                      <FormControl>
+                        <RequiredNumberInput
+                          value={Number.isFinite(value) ? value : undefined}
+                          onChange={(next) => onChange(next ?? Number.NaN)}
+                          {...fieldProps}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                className="text-sm font-semibold mb-3 underline underline-offset-2 hover:text-foreground/80"
+                onClick={() => setShowOptional((value) => !value)}
+              >
+                {showOptional ? "Hide" : "Show"} optional accuracy fields
+              </button>
+
+              {showOptional && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="rodLength"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rod Length (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Estimated if blank"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          SC / 3.2 rods: 127.8 mm C-C
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="intakeDurationAt1mm"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Intake Duration @ 1 mm (deg)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Seat-to-seat / @ 1 mm"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          DRC card lists this — refines when the seat closes
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="camAdvance"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Cam Advance (deg)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="0"
+                            step="0.5"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Positive = advanced (intake closes earlier)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="overlapLiftMM"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Overlap Lift Setting (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="From degree wheel"
+                            step="0.1"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Requires nominal overlap lift to apply
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="overlapLiftNominalMM"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nominal Overlap Lift (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Cam spec midpoint"
+                            step="0.1"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="intakeValveClosingAbdc"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>IVC ABDC (deg)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Direct from cam card"
+                            step="0.5"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Most accurate — overrides all IVC estimates
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bore"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bore (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="deckHeight"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Deck Height (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="gasketThicknessMM"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Head Gasket Thickness (mm)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="headVolumeCC"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Combustion Chamber (cc)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          With bore + deck + chamber, overrides manual static CR on calculate
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="pistonCrownVolumeCC"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Piston Crown Volume (cc)</FormLabel>
+                        <FormControl>
+                          <OptionalNumberInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Dome (+) or dish (−) volume
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex space-x-2">
+              <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                Calculate
+              </Button>
+              <Button type="button" variant="outline" onClick={handleReset}>
+                Reset
+              </Button>
             </div>
           </form>
         </Form>
 
         {dcrResult !== null && (
           <div className="mt-6 p-4 border-2 border-border bg-secondary shadow-md">
-            <h3 className="text-lg font-semibold mb-2">Result:</h3>
+            <h3 className="text-lg font-semibold mb-2">Result</h3>
             <p className="text-2xl font-bold">{dcrResult.dcr}:1</p>
             <p className="text-sm text-muted-foreground mt-1">{calculationDetails}</p>
+            {staticCRNote && (
+              <p className="text-sm text-muted-foreground mt-1">{staticCRNote}</p>
+            )}
             {dcrResult.warning && (
               <p className="text-sm text-destructive mt-2">{dcrResult.warning}</p>
             )}
           </div>
         )}
+
+        <div className="mt-6 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground space-y-2">
+          <p className="font-medium text-foreground">Example: 3.2SS — 98 mm bore, SC block/crank/rods, DC 993SS</p>
+          <p>
+            Stroke 70.4 mm · Static CR 10.2:1 (98 mm Mahle @ 1 mm deck) · Rod 127.8 mm ·
+            242° @ 0.050&quot; / 248° @ 1 mm · 114° LSA · 1.7 mm overlap · 2° advance
+          </p>
+          <p>
+            → IVC ~{quickExample.ivcAngleABDC}° ABDC · Effective stroke {quickExample.effectiveStrokeMM} mm ·{" "}
+            <strong className="text-foreground">DCR ≈ {quickExample.dcr}:1</strong>
+          </p>
+        </div>
 
         <footer className="mt-8 pt-4 border-t text-xs text-muted-foreground text-center">
           Built by{" "}
@@ -496,8 +734,8 @@ export function DCRCalculator() {
             className="underline hover:text-foreground"
           >
             ratio
-          </a>
-          {" "}gearset calculator
+          </a>{" "}
+          gearset calculator
         </footer>
       </CardContent>
     </Card>
