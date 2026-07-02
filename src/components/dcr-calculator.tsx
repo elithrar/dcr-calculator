@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -99,26 +99,6 @@ const enginePresets: EnginePreset[] = [
     deckHeight: 1,
   },
 ];
-
-const alignedFormGridClass = "grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6";
-
-const alignedFormItemClass = "row-span-4 grid grid-rows-subgrid gap-2";
-
-function FieldHelp({ children }: { children?: ReactNode }) {
-  if (!children) {
-    return <div aria-hidden="true" />;
-  }
-
-  return <FormDescription className="text-xs">{children}</FormDescription>;
-}
-
-function FieldErrorSlot() {
-  return (
-    <div>
-      <FormMessage />
-    </div>
-  );
-}
 
 function formatCamPresetTooltip(preset: CamPreset): string {
   let text = `${preset.intakeDuration}° @ 0.050" | ${preset.lsa}° LSA`;
@@ -416,12 +396,12 @@ export function DCRCalculator() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">Required — paper data points</h3>
-              <div className={alignedFormGridClass}>
+              <div className="aligned-form-grid">
                 <FormField
                   control={form.control}
                   name="stroke"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem className={alignedFormItemClass}>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Stroke (mm)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -430,8 +410,7 @@ export function DCRCalculator() {
                           {...fieldProps}
                         />
                       </FormControl>
-                      <FieldHelp />
-                      <FieldErrorSlot />
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -439,7 +418,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="staticCR"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem className={alignedFormItemClass}>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Static CR</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -448,10 +427,10 @@ export function DCRCalculator() {
                           {...fieldProps}
                         />
                       </FormControl>
-                      <FieldHelp>
+                      <FormDescription className="text-xs">
                         From piston spec sheet, or computed when bore + deck + chamber are filled
-                      </FieldHelp>
-                      <FieldErrorSlot />
+                      </FormDescription>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -459,7 +438,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="intakeDuration"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem className={alignedFormItemClass}>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Intake Duration @ 0.050&quot; (deg)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -469,8 +448,7 @@ export function DCRCalculator() {
                           {...fieldProps}
                         />
                       </FormControl>
-                      <FieldHelp />
-                      <FieldErrorSlot />
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -478,7 +456,7 @@ export function DCRCalculator() {
                   control={form.control}
                   name="lsa"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
-                    <FormItem className={alignedFormItemClass}>
+                    <FormItem className="aligned-form-item">
                       <FormLabel>Lobe Separation Angle (deg)</FormLabel>
                       <FormControl>
                         <RequiredNumberInput
@@ -487,8 +465,7 @@ export function DCRCalculator() {
                           {...fieldProps}
                         />
                       </FormControl>
-                      <FieldHelp />
-                      <FieldErrorSlot />
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -505,12 +482,12 @@ export function DCRCalculator() {
               </button>
 
               {showOptional && (
-                <div className={alignedFormGridClass}>
+                <div className="aligned-form-grid">
                   <FormField
                     control={form.control}
                     name="rodLength"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Rod Length (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -519,10 +496,10 @@ export function DCRCalculator() {
                             placeholder="Estimated if blank"
                           />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           SC / 3.2 rods: 127.8 mm C-C
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -530,7 +507,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="intakeDurationAt1mm"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Intake Duration @ 1 mm (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -539,10 +516,10 @@ export function DCRCalculator() {
                             placeholder="Seat-to-seat / @ 1 mm"
                           />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           DRC card lists this — refines when the seat closes
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -550,7 +527,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="camAdvance"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Cam Advance (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -560,10 +537,10 @@ export function DCRCalculator() {
                             step="0.5"
                           />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           Positive = advanced (intake closes earlier)
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -571,7 +548,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="overlapLiftMM"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Overlap Lift Setting (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -581,10 +558,10 @@ export function DCRCalculator() {
                             step="0.1"
                           />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           Requires nominal overlap lift to apply
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -592,7 +569,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="overlapLiftNominalMM"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Nominal Overlap Lift (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -602,8 +579,7 @@ export function DCRCalculator() {
                             step="0.1"
                           />
                         </FormControl>
-                        <FieldHelp />
-                        <FieldErrorSlot />
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -611,7 +587,7 @@ export function DCRCalculator() {
                     control={form.control}
                     name="intakeValveClosingAbdc"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>IVC ABDC (deg)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput
@@ -621,10 +597,10 @@ export function DCRCalculator() {
                             step="0.5"
                           />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           Most accurate — overrides all IVC estimates
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -632,13 +608,12 @@ export function DCRCalculator() {
                     control={form.control}
                     name="bore"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Bore (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
-                        <FieldHelp />
-                        <FieldErrorSlot />
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -646,13 +621,12 @@ export function DCRCalculator() {
                     control={form.control}
                     name="deckHeight"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Deck Height (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
-                        <FieldHelp />
-                        <FieldErrorSlot />
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -660,13 +634,12 @@ export function DCRCalculator() {
                     control={form.control}
                     name="gasketThicknessMM"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Head Gasket Thickness (mm)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
-                        <FieldHelp />
-                        <FieldErrorSlot />
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -674,15 +647,15 @@ export function DCRCalculator() {
                     control={form.control}
                     name="headVolumeCC"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Combustion Chamber (cc)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           With bore + deck + chamber, overrides manual static CR on calculate
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -690,15 +663,15 @@ export function DCRCalculator() {
                     control={form.control}
                     name="pistonCrownVolumeCC"
                     render={({ field }) => (
-                      <FormItem className={alignedFormItemClass}>
+                      <FormItem className="aligned-form-item">
                         <FormLabel>Piston Crown Volume (cc)</FormLabel>
                         <FormControl>
                           <OptionalNumberInput value={field.value} onChange={field.onChange} />
                         </FormControl>
-                        <FieldHelp>
+                        <FormDescription className="text-xs">
                           Dome (+) or dish (−) volume
-                        </FieldHelp>
-                        <FieldErrorSlot />
+                        </FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
