@@ -232,15 +232,19 @@ body {
 }
 
 @layer components {
-  .aligned-form-grid {
+  .aligned-form-section {
     container-type: inline-size;
+    container-name: aligned-form;
+  }
+
+  .aligned-form-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     column-gap: 1rem;
     row-gap: 1.5rem;
   }
 
-  @container (min-width: 28rem) {
+  @container aligned-form (min-width: 20rem) {
     .aligned-form-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -251,6 +255,7 @@ body {
     grid-row: span 4;
     grid-template-rows: subgrid;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   .aligned-form-item [data-slot="form-label"] {
@@ -261,6 +266,7 @@ body {
 
   .aligned-form-item [data-slot="form-control"] {
     grid-row: 2;
+    min-width: 0;
   }
 
   .aligned-form-item [data-slot="form-description"] {
