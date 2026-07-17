@@ -1,6 +1,5 @@
 import './App.css'
 import { DCRCalculator } from './components/dcr-calculator'
-import { DrivetrainPresets } from './components/drivetrain-presets'
 
 function App() {
   return (
@@ -11,10 +10,7 @@ function App() {
           Calculate Dynamic Compression Ratio based on camshaft specs & valve timing.
         </p>
       </header>
-      <div className="space-y-6">
-        <DCRCalculator />
-        <DrivetrainPresets />
-      </div>
+      <DCRCalculator />
     </div>
   )
 }
